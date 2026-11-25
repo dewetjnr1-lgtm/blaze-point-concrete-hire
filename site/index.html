@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concrete Hire – Book a machine</title>
+<link rel="icon" href="img/logo.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="hdr">
+  <img class="logo" src="img/logo.png" alt="Concrete Hire">
+  <p class="tag">Equipment hire &bull; Book ahead</p>
+</header>
+<main>
+  <p class="intro">Concrete cutting, grinding and preparation equipment. Pick a machine, choose your dates and send a booking request.</p>
+  <p id="status" class="status" role="status">Loading machines…</p>
+  <div id="grid" class="grid"></div>
+</main>
+
+<div id="overlay" class="overlay" hidden>
+  <form id="form" class="sheet" novalidate>
+    <button type="button" id="close" class="close" aria-label="Close">×</button>
+    <h2 id="formTitle"></h2>
+    <p id="formRate" class="rate"></p>
+    <label>Customer name<input id="name" type="text" autocomplete="name"></label>
+    <label>Phone<input id="phone" type="tel" autocomplete="tel"></label>
+    <label>Start date<input id="start" type="date"></label>
+    <label>End date<input id="end" type="date"></label>
+    <label>Delivery or Pickup
+      <select id="method"><option>Pickup</option><option>Delivery</option></select></label>
+    <label>Notes<textarea id="notes" rows="3"></textarea></label>
+    <p id="error" class="error" role="alert"></p>
+    <button type="submit" class="btn">Send booking request</button>
+    <p class="hint">This opens your email app. Press send to complete your request.</p>
+  </form>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
