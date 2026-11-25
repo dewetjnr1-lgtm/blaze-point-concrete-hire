@@ -63,6 +63,7 @@ What it does today (checked 25 Nov 2026):
 _Add one line per settled decision, newest last._
 
 1. (none yet)
+2. 25 Nov 2026: new repo `blaze-point-concrete-hire` is temporarily **public** (not private as planned) so the free GitHub Pages preview link works before Supabase/customer data exist; Chris chose this over setting up Cloudflare Pages now. Switch back to private before any real data goes in.
 
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._
