@@ -6,8 +6,20 @@
 // SAMPLE DATA ONLY. A real version needs a private shared database.
 // =====================================================================
 const ACCOUNTS_EMAIL = "accounts@example.com";   // change to the accounts person's email
+const BOOKING_EMAIL = "accounts@example.com";    // change to the address booking requests go to
 const PORTAL_URL = "https://www.husqvarnacp.com/"; // CHANGE: the Husqvarna dealer portal address Brad uses (not verified)
 const KEY = "ch_jobcards_v1";
+// DEMO ONLY: a single shared PIN for all staff. Real logins (one per person) come later (Prompt 4).
+const STAFF_PIN = "1234";
+const STAFF_KEY = "ch_staff_v1";
+const isStaff = () => localStorage.getItem(STAFF_KEY) === "1";
+
+const ICONS = {
+  history: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  drop: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4 6 7.2 6 10.5A6 6 0 0 1 6 13.5C6 10.2 8.5 7 12 3Z"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>'
+};
 
 const app = document.getElementById("app");
 const STATUS = { received: "Received", diagnosing: "In diagnosis", ready: "Ready to quote", quoted: "Quoted" };
@@ -39,7 +51,7 @@ fetch("spares.json").then(r => r.json()).then(l => {
   SPARES = l; refreshParts();
 }).catch(() => {}).finally(route);
 
-function route() { machineId ? renderMachine(machineId) : renderHome(); }
+function route() { machineId ? renderHub(machineId) : renderHome(); }
 const link = id => location.origin + location.pathname + "?m=" + id;
 const jobsOf = id => db.jobs.filter(j => j.machineId === id).sort((a, b) => b.n - a.n);
 const openJob = id => jobsOf(id).find(j => j.status !== "quoted");
@@ -84,18 +96,139 @@ function renderHome() {
   };
 }
 
+// ------------------------------------------------------------------ HUB
+// First page for any tag, whether the machine has been received before or not.
+function hubCard(label, icon, cls, onclick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "hubcard" + (cls ? " " + cls : "");
+  b.innerHTML = `<span class="ico">${icon}</span><span class="lbl">${esc(label)}</span>`;
+  b.onclick = onclick;
+  return b;
+}
+function renderHub(id) {
+  const m = db.machines[id];
+  app.innerHTML = `<h2 class="hubtitle">${m ? esc(m.name) + (m.model ? " " + esc(m.model) : "") : "New machine"}</h2><div class="hub"></div>`;
+  const hub = app.querySelector(".hub");
+  hub.appendChild(hubCard("Service history", ICONS.history, "", () => renderHistory(id)));
+  hub.appendChild(hubCard("Cleaning instructions", ICONS.drop, "alt", () => renderCleaning(id)));
+  hub.appendChild(hubCard("Book this machine", ICONS.calendar, "", () => renderBooking(id)));
+  hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => isStaff() ? renderStaffArea(id) : renderStaffLogin(id)));
+}
+function backLink(id) {
+  const a = document.createElement("a");
+  a.href = "#"; a.className = "backlink"; a.textContent = "← Back";
+  a.onclick = e => { e.preventDefault(); renderHub(id); };
+  return a;
+}
+
+// -------------------------------------------------------- SERVICE HISTORY
+// Customer-facing: dates only. No fault notes, parts or prices.
+function renderHistory(id) {
+  const done = jobsOf(id).filter(j => j.status === "quoted");
+  app.innerHTML = "";
+  app.appendChild(backLink(id));
+  const p = document.createElement("section"); p.className = "panel";
+  p.innerHTML = `<h2>Service history</h2>` + (done.length
+    ? done.map(j => `<div class="jobrow"><span>Serviced</span><span class="muted">${esc(j.date)}</span></div>`).join("")
+    : `<p class="empty">No service history yet.</p>`);
+  app.appendChild(p);
+}
+
+// ------------------------------------------------------- CLEANING
+function renderCleaning(id) {
+  const m = db.machines[id] || {};
+  const steps = m.cleaningSteps || "1. Remove all dust and debris with a brush or vacuum.\n2. Wipe down all surfaces with a damp cloth.\n3. Check and clean air filters.\n4. Coil up cords and hoses neatly.\n5. Report any damage on the booking form.";
+  app.innerHTML = "";
+  app.appendChild(backLink(id));
+  const p = document.createElement("section"); p.className = "panel";
+  p.innerHTML = `<h2>Cleaning instructions</h2><p class="cleantext">${esc(steps)}</p>` +
+    (m.cleaningVideoUrl ? `<a class="btn2" href="${esc(m.cleaningVideoUrl)}" target="_blank" rel="noopener">Watch cleaning video</a>` : `<p class="muted">No video yet.</p>`);
+  app.appendChild(p);
+}
+
+// ------------------------------------------------------- BOOK THIS MACHINE
+function renderBooking(id) {
+  const m = db.machines[id] || {};
+  app.innerHTML = "";
+  app.appendChild(backLink(id));
+  const p = document.createElement("section"); p.className = "panel";
+  p.innerHTML = `
+    <h2>Book this machine</h2>
+    <p class="muted">Send a booking request. This opens your email app &ndash; press send to complete it.</p>
+    <form id="bf" novalidate>
+      <label>Your name<input name="name" autocomplete="name"></label>
+      <label>Phone<input name="phone" type="tel" autocomplete="tel"></label>
+      <label>Start date<input name="start" type="date" min="${today()}"></label>
+      <label>End date<input name="end" type="date" min="${today()}"></label>
+      <p class="error" id="berr" role="alert"></p>
+      <button class="btn" type="submit">Send booking request</button>
+    </form>`;
+  app.appendChild(p);
+  document.getElementById("bf").onsubmit = e => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target).entries());
+    const err = document.getElementById("berr");
+    if (!f.name.trim()) return err.textContent = "Please enter your name.";
+    if (!f.phone.trim()) return err.textContent = "Please enter your phone number.";
+    if (!f.start) return err.textContent = "Please choose a start date.";
+    if (!f.end) return err.textContent = "Please choose an end date.";
+    if (f.end < f.start) return err.textContent = "End date cannot be before the start date.";
+    const subject = "Booking request: " + (m.name || "Machine " + id);
+    const body = [
+      "Hi Concrete Hire team,", "I'd like to book this machine.", "",
+      "Machine: " + (m.name || "(new machine)") + (m.model ? " " + m.model : ""),
+      "Tag link: " + link(id),
+      "Name: " + f.name.trim(), "Phone: " + f.phone.trim(),
+      "Start date: " + f.start, "End date: " + f.end
+    ].join("\n");
+    window.location.href = "mailto:" + BOOKING_EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+  };
+}
+
+// --------------------------------------------------- TECHNICIAN LOGIN (demo)
+function renderStaffLogin(id) {
+  app.innerHTML = "";
+  app.appendChild(backLink(id));
+  const p = document.createElement("section"); p.className = "panel";
+  p.innerHTML = `
+    <h2>Technician login</h2>
+    <p class="muted">Staff only. Demo PIN for now &ndash; real logins for each person come later.</p>
+    <form id="lf" novalidate>
+      <label>PIN<input name="pin" type="tel" inputmode="numeric" autocomplete="off"></label>
+      <p class="error" id="lerr" role="alert"></p>
+      <button class="btn" type="submit">Log in</button>
+    </form>`;
+  app.appendChild(p);
+  document.getElementById("lf").onsubmit = e => {
+    e.preventDefault();
+    const pin = new FormData(e.target).get("pin").trim();
+    if (pin !== STAFF_PIN) { document.getElementById("lerr").textContent = "Wrong PIN."; return; }
+    localStorage.setItem(STAFF_KEY, "1");
+    renderStaffArea(id);
+  };
+}
+
 // ------------------------------------------------------------- MACHINE
-function renderMachine(id) {
+function staffBarHtml(id) {
+  return `<div class="staffbar"><a href="#" class="backlink" id="hubback">← Back</a><a href="#" class="logoutlink" id="stafflogout">Log out of technician mode</a></div>`;
+}
+function wireStaffBar(id) {
+  const b = document.getElementById("hubback"); if (b) b.onclick = e => { e.preventDefault(); renderHub(id); };
+  const o = document.getElementById("stafflogout"); if (o) o.onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); renderHub(id); };
+}
+function renderStaffArea(id) {
   const m = db.machines[id];
   if (!m) return renderIntake(id, null);
   const open = openJob(id);
-  let html = `
+  let html = staffBarHtml(id) + `
     <section class="panel">
       <h2>${esc(m.name)} ${esc(m.model)}</h2>
       <p class="muted">${esc(m.company)}${m.contact ? " &bull; " + esc(m.contact) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}</p>
       <div class="taglink">Tag link: ${esc(link(id))}</div>
     </section>`;
   app.innerHTML = html;
+  wireStaffBar(id);
   if (open) {
     const box = document.createElement("div"); app.appendChild(box);
     open.status === "ready" ? renderAccounts(box, open, m) : renderTech(box, open, m);
@@ -117,7 +250,7 @@ function renderMachine(id) {
 // -------------------------------------------------------------- INTAKE
 function renderIntake(id, m) {
   m = m || {};
-  app.innerHTML = `
+  app.innerHTML = staffBarHtml(id) + `
     <section class="panel">
       <h2>Receive machine</h2>
       <p class="muted">Step 1 &ndash; fill this in when the machine arrives.</p>
@@ -135,6 +268,7 @@ function renderIntake(id, m) {
         <button class="btn" type="submit">Save &amp; receive machine</button>
       </form>
     </section>`;
+  wireStaffBar(id);
   document.getElementById("f").onsubmit = e => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target).entries());
@@ -142,7 +276,7 @@ function renderIntake(id, m) {
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
     db.machines[id] = { company: f.company.trim(), contact: f.contact.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim() };
     db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: "", items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
-    save(); renderMachine(id);
+    save(); renderStaffArea(id);
   };
 }
 
@@ -265,7 +399,7 @@ function renderTech(box, job, m) {
       if (!job.tech.trim()) return err.textContent = "Please enter the tech name.";
       const bad = job.items.findIndex(it => !it.work.trim() || !it.hours);
       if (bad >= 0) return err.textContent = "Work item #" + (bad + 1) + " needs 'work completed' and hours.";
-      job.status = "ready"; save(); renderMachine(job.machineId);
+      job.status = "ready"; save(); renderStaffArea(job.machineId);
     };
   };
   draw();
@@ -377,6 +511,6 @@ function renderAccounts(box, job, m, readonly) {
   box.querySelector("#csv").onclick = () => {
     download(jobNo(job) + ".csv", csvFor(job, m));
   };
-  const ro = box.querySelector("#reopen"); if (ro) ro.onclick = () => { job.status = "diagnosing"; save(); renderMachine(job.machineId); };
-  const q = box.querySelector("#quoted"); if (q) q.onclick = () => { job.status = "quoted"; save(); renderMachine(job.machineId); };
+  const ro = box.querySelector("#reopen"); if (ro) ro.onclick = () => { job.status = "diagnosing"; save(); renderStaffArea(job.machineId); };
+  const q = box.querySelector("#quoted"); if (q) q.onclick = () => { job.status = "quoted"; save(); renderStaffArea(job.machineId); };
 }
