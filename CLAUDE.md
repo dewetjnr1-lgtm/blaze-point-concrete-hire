@@ -65,6 +65,7 @@ _Add one line per settled decision, newest last._
 1. (none yet)
 2. 25 Nov 2026: new repo `blaze-point-concrete-hire` is temporarily **public** (not private as planned) so the free GitHub Pages preview link works before Supabase/customer data exist; Chris chose this over setting up Cloudflare Pages now. Switch back to private before any real data goes in.
 3. 25 Nov 2026: tapping any tag now opens a "machine page" first (4 big rounded bars: Service history, Cleaning instructions, Book this machine, Technician login), styled after concretehire.com.au's real cards (diagonal photo-block + bold heading). Technician login is a single shared demo PIN (1234) for everyone until Prompt 4 sets up real per-person logins.
+4. 26 Nov 2026: the old "All jobs / new machine tag / backup" screen is no longer public - it only shows after Technician login, and the phone remembers that login (no need to log in again until someone logs out). Logging in also asks for a name (kept with the PIN flag), which auto-fills "Received by" on the goods received form and "Tech name" on the job card, so we know who did what without typing it each time. This is still the shared demo PIN, not a real per-person login (that's Prompt 4).
 
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._

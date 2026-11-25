@@ -12,7 +12,9 @@ const KEY = "ch_jobcards_v1";
 // DEMO ONLY: a single shared PIN for all staff. Real logins (one per person) come later (Prompt 4).
 const STAFF_PIN = "1234";
 const STAFF_KEY = "ch_staff_v1";
+const STAFF_NAME_KEY = "ch_staff_name_v1";
 const isStaff = () => localStorage.getItem(STAFF_KEY) === "1";
+const staffName = () => localStorage.getItem(STAFF_NAME_KEY) || "";
 
 const ICONS = {
   history: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
@@ -51,16 +53,21 @@ fetch("spares.json").then(r => r.json()).then(l => {
   SPARES = l; refreshParts();
 }).catch(() => {}).finally(route);
 
-function route() { machineId ? renderHub(machineId) : renderHome(); }
+function route() { machineId ? renderHub(machineId) : (isStaff() ? renderStaffHome() : renderStaffLogin(null)); }
 const link = id => location.origin + location.pathname + "?m=" + id;
 const jobsOf = id => db.jobs.filter(j => j.machineId === id).sort((a, b) => b.n - a.n);
 const openJob = id => jobsOf(id).find(j => j.status !== "quoted");
 const money = n => "$" + Number(n).toFixed(2);
 const jobNo = j => "JC-" + String(j.n).padStart(4, "0");
 
-// ---------------------------------------------------------------- HOME
-function renderHome() {
-  app.innerHTML = `
+// ------------------------------------------------------- TECHNICIAN HOME
+// Shown after staff login with no tag (e.g. opening the app from the home screen icon).
+// Not reachable without logging in first - tags are the only way anyone else gets in.
+function staffHomeBarHtml() {
+  return `<div class="staffbar"><span class="muted">Logged in${staffName() ? " as " + esc(staffName()) : ""}</span><a href="#" class="logoutlink" id="stafflogout">Log out</a></div>`;
+}
+function renderStaffHome() {
+  app.innerHTML = staffHomeBarHtml() + `
     <section class="panel">
       <h2>All jobs &amp; history</h2>
       <p class="muted">Search by company, machine, model, serial or job number.</p>
@@ -68,15 +75,16 @@ function renderHome() {
       <div id="list"></div>
     </section>
     <section class="panel">
-      <h2>New machine tag</h2>
-      <p class="muted">Creates a unique link for one machine. Write it to an NFC tag once and leave the tag on the machine.</p>
-      <button class="btn" id="newtag" type="button">Create new machine tag</button>
+      <h2>Receive a new machine</h2>
+      <p class="muted">Starts a new machine's record. For a machine that already has a tag on it, tap the tag instead.</p>
+      <button class="btn" id="newtag" type="button">Receive a new machine</button>
     </section>
     <section class="panel">
       <h2>Backup</h2>
       <p class="muted">Downloads every job as one Excel-friendly file. Do this regularly.</p>
       <button class="btn2" id="all" type="button" style="width:100%">Download all history (.csv)</button>
     </section>`;
+  document.getElementById("stafflogout").onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); route(); };
   const draw = () => {
     const q = document.getElementById("q").value.trim().toLowerCase();
     const list = db.jobs.slice().sort((a, b) => b.n - a.n).filter(j => {
@@ -187,14 +195,18 @@ function renderBooking(id) {
 }
 
 // --------------------------------------------------- TECHNICIAN LOGIN (demo)
+// Logging in once is remembered on this phone from then on (no PIN next time),
+// so this only comes up again after someone logs out. Real per-person logins
+// (no shared PIN) come later - see Prompt 4 in BLAZE-POINT-PLAN.md.
 function renderStaffLogin(id) {
   app.innerHTML = "";
-  app.appendChild(backLink(id));
+  if (id) app.appendChild(backLink(id));
   const p = document.createElement("section"); p.className = "panel";
   p.innerHTML = `
     <h2>Technician login</h2>
-    <p class="muted">Staff only. Demo PIN for now &ndash; real logins for each person come later.</p>
+    <p class="muted">Staff only. Log in once &ndash; this phone will remember you after that. Demo PIN for now, real logins for each person come later.</p>
     <form id="lf" novalidate>
+      <label>Your name<input name="who" value="${esc(staffName())}" autocomplete="name"></label>
       <label>PIN<input name="pin" type="tel" inputmode="numeric" autocomplete="off"></label>
       <p class="error" id="lerr" role="alert"></p>
       <button class="btn" type="submit">Log in</button>
@@ -202,10 +214,13 @@ function renderStaffLogin(id) {
   app.appendChild(p);
   document.getElementById("lf").onsubmit = e => {
     e.preventDefault();
-    const pin = new FormData(e.target).get("pin").trim();
-    if (pin !== STAFF_PIN) { document.getElementById("lerr").textContent = "Wrong PIN."; return; }
+    const f = Object.fromEntries(new FormData(e.target).entries());
+    const err = document.getElementById("lerr");
+    if (!f.who.trim()) { err.textContent = "Please enter your name."; return; }
+    if (f.pin.trim() !== STAFF_PIN) { err.textContent = "Wrong PIN."; return; }
     localStorage.setItem(STAFF_KEY, "1");
-    renderStaffArea(id);
+    localStorage.setItem(STAFF_NAME_KEY, f.who.trim());
+    id ? renderStaffArea(id) : renderStaffHome();
   };
 }
 
@@ -261,7 +276,7 @@ function renderIntake(id, m) {
           <label>Machine name / ID<input name="name" value="${esc(m.name)}" autocomplete="off"></label>
           <label>Model<input name="model" value="${esc(m.model)}" autocomplete="off"></label>
           <label>Serial number<input name="serial" value="${esc(m.serial)}" autocomplete="off"></label>
-          <label>Received by<input name="by" autocomplete="off"></label>
+          <label>Received by<input name="by" value="${esc(staffName())}" autocomplete="off"></label>
         </div>
         <label>Fault reported by customer<textarea name="fault" rows="4"></textarea></label>
         <p class="error" id="err" role="alert"></p>
@@ -275,7 +290,7 @@ function renderIntake(id, m) {
     const miss = [["company", "company"], ["name", "machine name"], ["fault", "fault reported"]].find(([k]) => !f[k].trim());
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
     db.machines[id] = { company: f.company.trim(), contact: f.contact.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim() };
-    db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: "", items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
+    db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
     save(); renderStaffArea(id);
   };
 }
