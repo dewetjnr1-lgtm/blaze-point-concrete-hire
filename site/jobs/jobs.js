@@ -115,15 +115,7 @@ function renderStaffMenu() {
   }));
   hub.appendChild(hubCard("View current jobs", ICONS.history, "alt", () => renderCurrentJobs()));
   hub.appendChild(hubCard("Search", ICONS.search, "", () => renderSearch()));
-  const backup = document.createElement("section"); backup.className = "panel";
-  backup.innerHTML = `<p class="muted" style="margin:0 0 10px">Backup</p><button class="btn2" id="all" type="button" style="width:100%">Download all history (.csv)</button>`;
-  app.appendChild(backup);
   document.getElementById("stafflogout").onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); currentTag ? renderHub(currentTag) : renderStaffLogin(null); };
-  backup.querySelector("#all").onclick = () => {
-    const rows = [CSV_HEAD];
-    db.jobs.slice().sort((a, b) => a.n - b.n).forEach(j => rows.push(...rowsFor(j, db.machines[j.machineId] || {})));
-    download("all-jobs-" + today() + ".csv", toCsv(rows));
-  };
 }
 function renderCurrentJobs() {
   app.innerHTML = staffBarHtml() + `
