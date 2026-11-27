@@ -176,9 +176,16 @@ function hubCard(label, icon, cls, onclick) {
 // tags apart even before one is registered (nothing else to show yet).
 function renderHub(id) {
   const m = db.machines[id];
+  // The company only shows to logged-in staff - this page is public, and who
+  // currently has a machine is customer information, not something to show
+  // to anyone who taps the tag.
+  const latestJob = isStaff() ? (openJob(id) || jobsOf(id)[0]) : null;
   app.innerHTML = `
     <div class="hubtop">
-      <h2 class="hubtitle">${m ? esc(m.name) + (m.model ? " " + esc(m.model) : "") : "New machine"}</h2>
+      <div>
+        <h2 class="hubtitle">${m ? esc(m.name) + (m.model ? " " + esc(m.model) : "") : "New machine"}</h2>
+        ${latestJob ? `<p class="hubcompany">${esc(latestJob.company)}</p>` : ""}
+      </div>
       <span class="tagref">${esc(id)}</span>
     </div>
     <div class="hub"></div>`;

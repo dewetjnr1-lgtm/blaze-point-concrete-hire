@@ -56,6 +56,7 @@ table.sum th{width:38%;color:var(--ink2);font-weight:650}
 .hubtop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 14px}
 .hubtitle{margin:0;font-size:1.3rem;letter-spacing:-.01em;color:var(--ink)}
 .tagref{flex:none;font-size:.72rem;font-weight:700;letter-spacing:.02em;color:var(--ink2);background:rgba(13,29,18,.08);border-radius:99px;padding:4px 10px;white-space:nowrap}
+.hubcompany{margin:2px 0 0;font-size:.85rem;font-weight:650;color:var(--ink2)}
 .hub{display:flex;flex-direction:column;gap:14px;margin:0 0 16px}
 .hubcard{
   display:flex;align-items:stretch;width:100%;min-height:84px;overflow:hidden;
