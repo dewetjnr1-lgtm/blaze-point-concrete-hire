@@ -171,31 +171,22 @@ function hubCard(label, icon, cls, onclick) {
   b.onclick = onclick;
   return b;
 }
+// First page for any tag, registered or not - the 4 options are always here.
+// The small code in the corner is the tag's own reference, so staff can tell
+// tags apart even before one is registered (nothing else to show yet).
 function renderHub(id) {
   const m = db.machines[id];
-  if (!m) return renderNotRegistered(id);
-  app.innerHTML = `<h2 class="hubtitle">${esc(m.name)}${m.model ? " " + esc(m.model) : ""}</h2><div class="hub"></div>`;
+  app.innerHTML = `
+    <div class="hubtop">
+      <h2 class="hubtitle">${m ? esc(m.name) + (m.model ? " " + esc(m.model) : "") : "New machine"}</h2>
+      <span class="tagref">${esc(id)}</span>
+    </div>
+    <div class="hub"></div>`;
   const hub = app.querySelector(".hub");
   hub.appendChild(hubCard("Service history", ICONS.history, "", () => renderHistory(id)));
   hub.appendChild(hubCard("Cleaning instructions", ICONS.drop, "alt", () => renderCleaning(id)));
   hub.appendChild(hubCard("Book this machine", ICONS.calendar, "", () => renderBooking(id)));
   hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => isStaff() ? renderStaffMenu() : renderStaffLogin(id)));
-}
-// A tag that's never been received before. The code only lives in the link itself
-// (see CLAUDE.md Section 4) - nothing is stored until a staff member registers it.
-function renderNotRegistered(id) {
-  app.innerHTML = `
-    <section class="panel">
-      <h2>This machine is not registered yet</h2>
-      <p class="muted">This tag hasn't been set up in our system before.</p>
-    </section>
-    <div class="hub"></div>`;
-  const hub = app.querySelector(".hub");
-  if (isStaff()) {
-    hub.appendChild(hubCard("Register this machine", ICONS.tag, "staff", () => renderIntake(id, null)));
-  } else {
-    hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => renderStaffLogin(id)));
-  }
 }
 function backLink(id) {
   const a = document.createElement("a");
