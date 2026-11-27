@@ -252,10 +252,12 @@ function renderStaffLogin(id) {
 
 // ------------------------------------------------------------- MACHINE
 function staffBarHtml(id) {
-  return `<div class="staffbar"><a href="#" class="backlink" id="hubback">← Back</a><a href="#" class="logoutlink" id="stafflogout">Log out of technician mode</a></div>`;
+  return `<div class="staffbar"><a href="#" class="backlink" id="hubback">← Back to jobs list</a><a href="#" class="logoutlink" id="stafflogout">Log out of technician mode</a></div>`;
 }
 function wireStaffBar(id) {
-  const b = document.getElementById("hubback"); if (b) b.onclick = e => { e.preventDefault(); renderHub(id); };
+  // Always back to the technician home (received machines + receive new) -
+  // this bar only ever shows to someone already logged in as staff.
+  const b = document.getElementById("hubback"); if (b) b.onclick = e => { e.preventDefault(); history.pushState(null, "", location.pathname); renderStaffHome(); };
   const o = document.getElementById("stafflogout"); if (o) o.onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); renderHub(id); };
 }
 function renderStaffArea(id) {

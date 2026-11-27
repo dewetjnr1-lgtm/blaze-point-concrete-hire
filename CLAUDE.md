@@ -74,6 +74,7 @@ _Add one line per settled decision, newest last._
 10. 27 Nov 2026: "Contact name" is now two fields, First name and Surname.
 11. 27 Nov 2026: each work item on the job card now has: a Photos section (up to 3, shrunk down in the browser before saving, still phone-only until the shared database exists) and a Source field per part (Husqvarna / WORX / Other). The "Add to our parts list" tick box now saves the part's source too, so it's remembered next time.
 12. 27 Nov 2026: picking or typing a company on Receive machine that we've already dealt with auto-fills First name, Surname, Mobile number and Contact email from the last job for that company - only filling in blanks, never overwriting what's already typed, and fills in as soon as the name matches (no need to tap away first). Works for any company we've seen before, not just the 8 sample ones. Added one made-up contact (Westside Demolition) so this has something to show before any real jobs exist.
+13. 27 Nov 2026: "Back" on a job card or the Receive machine form always goes back to the technician home ("Received machines" + "Receive a new machine"), never to the public 4-option page - that bar only ever shows to someone already logged in as staff, so there's nothing else it should lead back to.
 
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._
