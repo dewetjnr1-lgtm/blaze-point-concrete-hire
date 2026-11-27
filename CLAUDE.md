@@ -70,7 +70,7 @@ _Add one line per settled decision, newest last._
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._
 
-1. (to be added)
+1. (Phase 2) Receive machine's "Company" field becomes a search box linked to Xero: pick an existing company from a dropdown, or keep typing to add a new one. Save Xero's own company ID alongside the typed name (not just the name) so invoicing later matches the exact Xero contact. Don't link the phones to Xero directly - keep a synced copy on our own private server/database, refreshed on a schedule, since Xero's access token must never be in the phone-facing website code. Confirm Xero API costs/limits at developer.xero.com/pricing before building.
 
 ---
 
@@ -131,6 +131,7 @@ Write the setup as SQL in `supabase/schema.sql` and sample data in `supabase/see
 
 ### Quotes and invoices (Phase 2)
 - Check the ATO's current rules for a valid tax invoice and quote first. Ask Chris which accounting software Brad's admin uses. Present the options (build our own or connect to his software) with costs, and wait for Chris's choice.
+- Brad's admin uses Xero. Planned: Receive machine's Company field becomes a Xero-linked search box (pick existing company or type a new one); store Xero's contact ID, not just the name, so invoices match the right contact. Keep a synced copy of Xero contacts on our own server rather than linking phones to Xero directly (token security, reliability, usage limits). See item 1 under "Changes Chris and Brad want" above.
 
 ---
 
