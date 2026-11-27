@@ -13,7 +13,7 @@ textarea{resize:vertical}
 .item{border:1.5px solid rgba(13,29,18,.14);border-radius:16px;padding:14px;margin:12px 0;background:rgba(255,255,255,.55)}
 .item h4{margin:0 0 2px;font-size:1rem}
 .part{display:grid;gap:8px;grid-template-columns:1fr;padding:10px 0;border-top:1px dashed rgba(13,29,18,.18)}
-@media(min-width:560px){.part{grid-template-columns:2fr 1.2fr 90px 44px}}
+@media(min-width:560px){.part{grid-template-columns:2fr 1fr 1fr 80px 44px}}
 .part input{margin-top:0}
 .x{min-height:48px;border:0;border-radius:12px;background:rgba(13,29,18,.07);font-size:1.3rem;cursor:pointer}
 .btn2{display:inline-block;min-height:48px;padding:12px 18px;font:inherit;font-weight:700;color:var(--ink);background:rgba(13,29,18,.08);border:0;border-radius:12px;cursor:pointer;text-decoration:none;text-align:center}
@@ -77,3 +77,11 @@ table.sum th{width:38%;color:var(--ink2);font-weight:650}
 .staffbar{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px;flex-wrap:wrap;gap:10px}
 .logoutlink{color:var(--ink2);text-decoration:none;font-weight:650;font-size:.9rem}
 .cleantext{white-space:pre-wrap;margin:0 0 10px}
+
+/* photos on a work item */
+.photos{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.photo{position:relative;width:78px;height:78px;border-radius:12px;overflow:hidden;flex:none}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.photox{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:#0d1d12;color:#fff;border:0;font-size:13px;line-height:1;cursor:pointer}
+.photoadd{width:78px;height:78px;flex:none;border-radius:12px;border:2px dashed rgba(13,29,18,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--acc);font-size:26px;font-weight:300;cursor:pointer;margin-top:0}
+.photoadd span{font-size:10px;font-weight:700;margin-top:0}

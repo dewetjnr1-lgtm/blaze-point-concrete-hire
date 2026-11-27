@@ -64,7 +64,26 @@ const jobsOf = id => db.jobs.filter(j => j.machineId === id).sort((a, b) => b.n 
 const openJob = id => jobsOf(id).find(j => j.status !== "quoted");
 const money = n => "$" + Number(n).toFixed(2);
 const jobNo = j => "JC-" + String(j.n).padStart(4, "0");
-const contactLine = m => [m.contactName, m.contactPhone, m.contactEmail].filter(Boolean).join(" • ");
+// Shrinks a photo in the phone's browser before saving (keeps it small; nothing uploaded anywhere yet).
+function resizeImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) { if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; } else { w = Math.round(w * maxDim / h); h = maxDim; } }
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject; img.src = reader.result;
+    };
+    reader.onerror = reject; reader.readAsDataURL(file);
+  });
+}
+const contactName = m => [m.contactFirst, m.contactSurname].filter(Boolean).join(" ");
+const contactLine = m => [contactName(m), m.contactPhone, m.contactEmail].filter(Boolean).join(" • ");
 
 // ------------------------------------------------------- TECHNICIAN HOME
 // Shown after staff login with no tag (e.g. opening the app from the home screen icon).
@@ -278,8 +297,9 @@ function renderIntake(id, m) {
       <p class="muted">Step 1 &ndash; fill this in when the machine arrives.</p>
       <form id="f" novalidate>
         <div class="grid2">
-          <label>Company<input name="company" value="${esc(m.company)}" list="companylist" autocomplete="off"><datalist id="companylist">${SAMPLE_COMPANIES.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label>
-          <label>Contact name<input name="contactName" value="${esc(m.contactName)}" autocomplete="off"></label>
+          <label>Company<input name="company" id="company" value="${esc(m.company)}" autocomplete="off"><div class="sugg" id="companysugg" hidden></div></label>
+          <label>First name<input name="contactFirst" value="${esc(m.contactFirst)}" autocomplete="off"></label>
+          <label>Surname<input name="contactSurname" value="${esc(m.contactSurname)}" autocomplete="off"></label>
           <label>Mobile number<input name="contactPhone" type="tel" value="${esc(m.contactPhone)}" autocomplete="off"></label>
           <label>Contact email<input name="contactEmail" type="email" value="${esc(m.contactEmail)}" autocomplete="off"></label>
           <label>Machine name / ID<input name="name" value="${esc(m.name)}" autocomplete="off"></label>
@@ -294,15 +314,32 @@ function renderIntake(id, m) {
       </form>
     </section>`;
   wireStaffBar(id);
+  wireCompanyAutocomplete(document.getElementById("company"), document.getElementById("companysugg"));
   document.getElementById("f").onsubmit = e => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target).entries());
     const miss = [["company", "company"], ["name", "machine name"], ["fault", "fault reported"]].find(([k]) => !f[k].trim());
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
-    db.machines[id] = { company: f.company.trim(), inXero: isKnownCompany(f.company), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim(), machineHours: f.machineHours.trim() };
+    db.machines[id] = { company: f.company.trim(), inXero: isKnownCompany(f.company), contactFirst: f.contactFirst.trim(), contactSurname: f.contactSurname.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim(), machineHours: f.machineHours.trim() };
     db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
     save(); renderStaffHome();
   };
+}
+// Own dropdown rather than the browser's native <datalist> suggestions,
+// which don't show up reliably on phones (notably iPhone Safari).
+function wireCompanyAutocomplete(input, list) {
+  const hide = () => { list.hidden = true; };
+  const show = () => {
+    const q = input.value.trim().toLowerCase();
+    const hits = SAMPLE_COMPANIES.filter(c => c.toLowerCase().includes(q));
+    if (!hits.length) return hide();
+    list.innerHTML = hits.map((c, n) => `<button type="button" data-n="${n}">${esc(c)}</button>`).join("");
+    list.hidden = false;
+    list.querySelectorAll("button").forEach(btn => btn.onclick = () => { input.value = hits[+btn.dataset.n]; hide(); });
+  };
+  input.addEventListener("focus", show);
+  input.addEventListener("input", show);
+  document.addEventListener("click", e => { if (e.target !== input && !list.contains(e.target)) hide(); });
 }
 
 // ---------------------------------------------------------------- TECH
@@ -326,12 +363,24 @@ function renderTech(box, job, m) {
             <label>Fault found / work to do<textarea rows="3" data-i="${i}" data-f="fault">${esc(it.fault)}</textarea></label>
             <label>Work completed / notes<textarea rows="4" data-i="${i}" data-f="work">${esc(it.work)}</textarea></label>
             <label>Hours<select data-i="${i}" data-f="hours">${hoursOptions(it.hours)}</select></label>
+            <h3>Photos (up to 3)</h3>
+            <div class="photos">
+              ${(it.photos || []).map((src, pi) => `<div class="photo"><img src="${src}" alt=""><button type="button" class="photox" data-rmphoto="${i}.${pi}" aria-label="Remove photo">&times;</button></div>`).join("")}
+              ${(it.photos || []).length < 3 ? `<label class="photoadd"><input type="file" accept="image/*" capture="environment" hidden data-addphoto="${i}">+<span>Add photo</span></label>` : ""}
+            </div>
+            <p class="muted" style="margin:0 0 4px">${(it.photos || []).length} of 3 photos added. Saved on this phone only for now.</p>
             <h3>Parts used</h3>
             <button type="button" class="btn browse" data-browse="${i}">Browse Worx+ parts by category</button>
             ${it.parts.map((p, k) => `
               <div class="partwrap"><div class="part">
                 <input placeholder="Search parts or type one"  value="${esc(p.desc)}" data-i="${i}" data-p="${k}" data-f="desc" autocomplete="off">
                 <input placeholder="Part number" value="${esc(p.pn)}" data-i="${i}" data-p="${k}" data-f="pn" autocomplete="off">
+                <select data-i="${i}" data-p="${k}" data-f="source">
+                  <option value=""${!p.source ? " selected" : ""}>Source…</option>
+                  <option value="Husqvarna"${p.source === "Husqvarna" ? " selected" : ""}>Husqvarna</option>
+                  <option value="WORX"${p.source === "WORX" ? " selected" : ""}>WORX</option>
+                  <option value="Other"${p.source === "Other" ? " selected" : ""}>Other</option>
+                </select>
                 <input type="number" inputmode="numeric" min="1" placeholder="Qty" value="${esc(p.qty)}" data-i="${i}" data-p="${k}" data-f="qty">
                 <button type="button" class="x" aria-label="Remove part" data-rm="${i}.${k}">&times;</button>
               </div>
@@ -400,7 +449,7 @@ function renderTech(box, job, m) {
       const label = c.parentElement.querySelector("span");
       if (!c.checked) return;
       if (!p.desc.trim()) { c.checked = false; label.textContent = "Enter the part first"; return; }
-      if (!allParts().some(x => x.description === p.desc.trim())) { EXTRA.push({ description: p.desc.trim(), partNumber: p.pn.trim() }); saveExtra(EXTRA); refreshParts(); }
+      if (!allParts().some(x => x.description === p.desc.trim())) { EXTRA.push({ description: p.desc.trim(), partNumber: p.pn.trim(), source: p.source || "Other" }); saveExtra(EXTRA); refreshParts(); }
       label.textContent = "Added to parts list \u2713";
     });
     box.querySelectorAll("[data-browse]").forEach(b => b.onclick = () => {
@@ -415,6 +464,17 @@ function renderTech(box, job, m) {
       });
     });
     box.querySelectorAll("[data-addpart]").forEach(b => b.onclick = () => { job.items[+b.dataset.addpart].parts.push({ desc: "", pn: "", qty: "" }); save(); draw(); });
+    box.querySelectorAll("[data-addphoto]").forEach(inp => inp.onchange = async () => {
+      const file = inp.files[0]; if (!file) return;
+      const it = job.items[+inp.dataset.addphoto];
+      it.photos = it.photos || [];
+      if (it.photos.length >= 3) return;
+      try { it.photos.push(await resizeImage(file, 900, 0.6)); save(); draw(); } catch (e) {}
+    });
+    box.querySelectorAll("[data-rmphoto]").forEach(b => b.onclick = () => {
+      const [i, pi] = b.dataset.rmphoto.split(".").map(Number);
+      job.items[i].photos.splice(pi, 1); save(); draw();
+    });
     box.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { const [i, k] = b.dataset.rm.split(".").map(Number); const ps = job.items[i].parts; ps.splice(k, 1); if (!ps.length) ps.push({ desc: "", pn: "", qty: "" }); save(); draw(); });
     box.querySelectorAll("[data-rmitem]").forEach(b => b.onclick = () => { job.items.splice(+b.dataset.rmitem, 1); save(); draw(); });
     box.querySelector("#additem").onclick = () => { job.items.push({ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }); save(); draw(); };
@@ -489,7 +549,7 @@ function openBrowser(pick) {
 }
 
 // ------------------------------------------------------------ ACCOUNTS
-const CSV_HEAD = ["Job No", "Date", "Company", "In Xero", "Contact name", "Contact phone", "Contact email", "Machine", "Model", "Serial", "Machine hours", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Qty", "RRP each"];
+const CSV_HEAD = ["Job No", "Date", "Company", "In Xero", "Contact first name", "Contact surname", "Contact phone", "Contact email", "Machine", "Model", "Serial", "Machine hours", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Part source", "Qty", "RRP each"];
 const toCsv = rows => "\ufeff" + rows.map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
 function download(name, text) {
   const a = document.createElement("a");
@@ -500,7 +560,7 @@ function rowsFor(job, m) {
   const rows = [];
   job.items.forEach((it, i) => {
     const parts = it.parts.filter(p => p.desc || p.pn || p.qty);
-    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.inXero === false ? "No" : "Yes", m.contactName, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, m.machineHours, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.qty, p.rrp == null ? "" : p.rrp]));
+    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.inXero === false ? "No" : "Yes", m.contactFirst, m.contactSurname, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, m.machineHours, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.source, p.qty, p.rrp == null ? "" : p.rrp]));
   });
   return rows;
 }
@@ -526,7 +586,8 @@ function renderAccounts(box, job, m, readonly) {
         <h3>Work item #${i + 1} &ndash; ${it.hours ? esc(it.hours) + " h" : "no hours"}</h3>
         ${it.fault ? `<p class="muted"><b>Found:</b> ${esc(it.fault)}</p>` : ""}
         <p style="margin:0 0 8px;white-space:pre-wrap">${esc(it.work)}</p>
-        ${it.parts.some(p => p.desc || p.pn) ? `<table class="partsum"><tr><th>Part</th><th>Number</th><th>Qty</th><th>RRP</th></tr>${it.parts.filter(p => p.desc || p.pn).map(p => `<tr><td>${esc(p.desc)}</td><td>${esc(p.pn)}</td><td>${esc(p.qty)}</td><td>${p.rrp !== "" && p.rrp != null ? esc(money(p.rrp)) : "&ndash;"}</td></tr>`).join("")}</table>` : `<p class="muted">No parts.</p>`}`).join("")}
+        ${it.parts.some(p => p.desc || p.pn) ? `<table class="partsum"><tr><th>Part</th><th>Number</th><th>Source</th><th>Qty</th><th>RRP</th></tr>${it.parts.filter(p => p.desc || p.pn).map(p => `<tr><td>${esc(p.desc)}</td><td>${esc(p.pn)}</td><td>${esc(p.source)}</td><td>${esc(p.qty)}</td><td>${p.rrp !== "" && p.rrp != null ? esc(money(p.rrp)) : "&ndash;"}</td></tr>`).join("")}</table>` : `<p class="muted">No parts.</p>`}
+        ${(it.photos || []).length ? `<div class="photos">${it.photos.map(src => `<div class="photo"><img src="${src}" alt=""></div>`).join("")}</div>` : ""}`).join("")}
       <div class="actions">
         <button class="btn" id="csv" type="button" style="margin-top:0">Download Excel file (.csv)</button>
         ${readonly ? "" : `<a class="btn2" href="mailto:${esc(ACCOUNTS_EMAIL)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}">Email accounts the link</a>`}

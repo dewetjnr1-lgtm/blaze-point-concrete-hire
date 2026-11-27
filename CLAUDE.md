@@ -70,12 +70,15 @@ _Add one line per settled decision, newest last._
 6. 27 Nov 2026: "Contact name & phone" split into Contact name, Mobile number and Contact email (ready for texting/emailing the customer later). Added a Machine hours field to Receive machine.
 7. 27 Nov 2026: after Save & receive machine, technicians return to the "Received machines" home list (renamed from "All jobs & history") instead of straight into the job card. Tapping a job in that list now opens it directly - no more detour through the public 4-option page for someone already logged in as staff.
 8. 27 Nov 2026: Husqvarna dealer portal link confirmed as https://portal.husqvarnagroup.com/au/ - opens in a new tab only, no login ever handled by this app.
+9. 27 Nov 2026: the Company field uses our own type-ahead dropdown (built with plain JS) instead of the browser's native suggestion list, because that native list doesn't show up reliably on phones (iPhone Safari especially). Works the same way everywhere.
+10. 27 Nov 2026: "Contact name" is now two fields, First name and Surname.
+11. 27 Nov 2026: each work item on the job card now has: a Photos section (up to 3, shrunk down in the browser before saving, still phone-only until the shared database exists) and a Source field per part (Husqvarna / WORX / Other). The "Add to our parts list" tick box now saves the part's source too, so it's remembered next time.
 
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._
 
 1. ~~Company field is a type-ahead/search box~~ (done 27 Nov 2026, with a sample list for now). Still to do in Phase 2: swap the sample list for a synced, read-only copy of Brad's real Xero contacts, and save Xero's own contact ID alongside the typed name (not just the name) so invoicing later matches the exact Xero contact. Don't link the phones to Xero directly - keep a synced copy on our own private server/database, refreshed on a schedule, since Xero's access token must never be in the phone-facing website code. Confirm Xero API costs/limits at developer.xero.com/pricing before building.
-2. In progress: "Work to do" section on each job - photos per work item (max 2-3, shrunk, phone-only for now), a Source field (Husqvarna / WORX / Other) on each part, and the common-parts save-for-next-time list. Husqvarna portal link confirmed (see decision 8 above). Waiting on Chris's go-ahead before building.
+2. ~~"Work to do" section on each job~~ (done 27 Nov 2026 - see decisions 9-11 above).
 
 ---
 
