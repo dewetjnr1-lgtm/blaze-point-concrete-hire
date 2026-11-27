@@ -25,7 +25,9 @@ const ICONS = {
   history: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   drop: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4 6 7.2 6 10.5A6 6 0 0 1 6 13.5C6 10.2 8.5 7 12 3Z"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>'
+  lock: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 12l9 9a2 2 0 0 0 2.8 0l7.2-7.2a2 2 0 0 0 0-2.8L12 2Z"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/></svg>',
+  search: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'
 };
 
 const app = document.getElementById("app");
@@ -53,12 +55,16 @@ const hay = p => p._h || (p._h = (p.description + " " + p.partNumber + " " + (p.
 
 const params = new URLSearchParams(location.search);
 const machineId = params.get("m");
+// The tag this session started on, if any. Stays fixed as staff browse around via
+// Current jobs / Search, so "Receive machine" and "Back to staff menu" always refer
+// to the machine they actually walked up and tapped.
+let currentTag = machineId;
 
 fetch("spares.json").then(r => r.json()).then(l => {
   SPARES = l; refreshParts();
 }).catch(() => {}).finally(route);
 
-function route() { machineId ? renderHub(machineId) : (isStaff() ? renderStaffHome() : renderStaffLogin(null)); }
+function route() { machineId ? renderHub(machineId) : (isStaff() ? renderStaffMenu() : renderStaffLogin(null)); }
 const link = id => location.origin + location.pathname + "?m=" + id;
 const jobsOf = id => db.jobs.filter(j => j.machineId === id).sort((a, b) => b.n - a.n);
 const openJob = id => jobsOf(id).find(j => j.status !== "quoted");
@@ -82,52 +88,77 @@ function resizeImage(file, maxDim, quality) {
     reader.onerror = reject; reader.readAsDataURL(file);
   });
 }
-const contactName = m => [m.contactFirst, m.contactSurname].filter(Boolean).join(" ");
-const contactLine = m => [contactName(m), m.contactPhone, m.contactEmail].filter(Boolean).join(" • ");
+const contactName = j => [j.contactFirst, j.contactSurname].filter(Boolean).join(" ");
+const contactLine = j => [contactName(j), j.contactPhone, j.contactEmail].filter(Boolean).join(" • ");
+// A clickable row for a job in any staff list (Current jobs, Search). Always
+// opens that machine's own page, which shows its current job and full history.
+function jobRowHtml(j) {
+  const m = db.machines[j.machineId] || {};
+  return `<a class="jobrow" href="?m=${esc(j.machineId)}" data-m="${esc(j.machineId)}"><span><b>${jobNo(j)} &ndash; ${esc(j.company)}</b>${j.inXero === false ? ' <span class="pill received">Not in Xero</span>' : ""}<small>${esc(m.name)} ${esc(m.model)} &bull; ${esc(j.date)}</small></span><span class="pill ${j.status}">${STATUS[j.status]}</span></a>`;
+}
+function wireJobRows(list) {
+  list.querySelectorAll("a[data-m]").forEach(a => a.onclick = e => { e.preventDefault(); history.pushState(null, "", "?m=" + a.dataset.m); renderStaffArea(a.dataset.m); });
+}
 
-// ------------------------------------------------------- TECHNICIAN HOME
-// Shown after staff login with no tag (e.g. opening the app from the home screen icon).
+// -------------------------------------------------------- STAFF MENU
+// Shown after every Technician login, whether or not staff arrived via a tag.
 // Not reachable without logging in first - tags are the only way anyone else gets in.
 function staffHomeBarHtml() {
   return `<div class="staffbar"><span class="muted">Logged in${staffName() ? " as " + esc(staffName()) : ""}</span><a href="#" class="logoutlink" id="stafflogout">Log out</a></div>`;
 }
-function renderStaffHome() {
-  app.innerHTML = staffHomeBarHtml() + `
-    <section class="panel">
-      <h2>Received machines</h2>
-      <p class="muted">Search by company, machine, model, serial or job number. Tap any job to open it.</p>
-      <input id="q" type="search" placeholder="Search…" autocomplete="off">
-      <div id="list"></div>
-    </section>
-    <section class="panel">
-      <h2>Receive a new machine</h2>
-      <p class="muted">Starts a new machine's record. For a machine that already has a tag on it, tap the tag instead.</p>
-      <button class="btn" id="newtag" type="button">Receive a new machine</button>
-    </section>
-    <section class="panel">
-      <h2>Backup</h2>
-      <p class="muted">Downloads every job as one Excel-friendly file. Do this regularly.</p>
-      <button class="btn2" id="all" type="button" style="width:100%">Download all history (.csv)</button>
-    </section>`;
-  document.getElementById("stafflogout").onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); route(); };
-  const draw = () => {
-    const q = document.getElementById("q").value.trim().toLowerCase();
-    const list = db.jobs.slice().sort((a, b) => b.n - a.n).filter(j => {
-      const m = db.machines[j.machineId] || {};
-      return !q || [jobNo(j), m.company, m.name, m.model, m.serial].join(" ").toLowerCase().includes(q);
-    });
-    document.getElementById("list").innerHTML = list.length ? list.map(j => { const m = db.machines[j.machineId] || {}; return `
-      <a class="jobrow" href="?m=${esc(j.machineId)}" data-m="${esc(j.machineId)}"><span><b>${jobNo(j)} &ndash; ${esc(m.company)}</b>${m.inXero === false ? ' <span class="pill received">Not in Xero</span>' : ""}<small>${esc(m.name)} ${esc(m.model)} &bull; ${esc(j.date)}</small></span><span class="pill ${j.status}">${STATUS[j.status]}</span></a>`; }).join("")
-      : `<p class="empty">${q ? "Nothing matches." : "No jobs yet."}</p>`;
-    document.querySelectorAll("a[data-m]").forEach(a => a.onclick = e => { e.preventDefault(); history.pushState(null, "", "?m=" + a.dataset.m); renderStaffArea(a.dataset.m); });
-  };
-  document.getElementById("q").oninput = draw; draw();
-  document.getElementById("newtag").onclick = () => { location.href = "?m=" + newId(); };
-  document.getElementById("all").onclick = () => {
+function renderStaffMenu() {
+  app.innerHTML = staffHomeBarHtml() + `<div class="hub"></div>`;
+  const hub = app.querySelector(".hub");
+  hub.appendChild(hubCard("Receive machine / open new job card", ICONS.tag, "", () => {
+    if (currentTag) { renderStaffArea(currentTag); }
+    else { const nid = newId(); currentTag = nid; history.pushState(null, "", "?m=" + nid); renderIntake(nid, null); }
+  }));
+  hub.appendChild(hubCard("View current jobs", ICONS.history, "alt", () => renderCurrentJobs()));
+  hub.appendChild(hubCard("Search", ICONS.search, "", () => renderSearch()));
+  const backup = document.createElement("section"); backup.className = "panel";
+  backup.innerHTML = `<p class="muted" style="margin:0 0 10px">Backup</p><button class="btn2" id="all" type="button" style="width:100%">Download all history (.csv)</button>`;
+  app.appendChild(backup);
+  document.getElementById("stafflogout").onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); currentTag ? renderHub(currentTag) : renderStaffLogin(null); };
+  backup.querySelector("#all").onclick = () => {
     const rows = [CSV_HEAD];
     db.jobs.slice().sort((a, b) => a.n - b.n).forEach(j => rows.push(...rowsFor(j, db.machines[j.machineId] || {})));
     download("all-jobs-" + today() + ".csv", toCsv(rows));
   };
+}
+function renderCurrentJobs() {
+  app.innerHTML = staffBarHtml() + `
+    <section class="panel">
+      <h2>Current jobs</h2>
+      <p class="muted">Received or in progress. Tap a job to open it.</p>
+      <div id="list"></div>
+    </section>`;
+  wireStaffBar();
+  const list = db.jobs.filter(j => j.status === "received" || j.status === "diagnosing").sort((a, b) => b.n - a.n);
+  const listEl = document.getElementById("list");
+  listEl.innerHTML = list.length ? list.map(jobRowHtml).join("") : `<p class="empty">No current jobs.</p>`;
+  wireJobRows(listEl);
+}
+function renderSearch() {
+  app.innerHTML = staffBarHtml() + `
+    <section class="panel">
+      <h2>Search</h2>
+      <p class="muted">Search by company, machine name, model, serial number or job number.</p>
+      <input id="q" type="search" placeholder="Search…" autocomplete="off">
+      <div id="list"></div>
+    </section>`;
+  wireStaffBar();
+  const listEl = document.getElementById("list");
+  const draw = () => {
+    const q = document.getElementById("q").value.trim().toLowerCase();
+    if (!q) { listEl.innerHTML = `<p class="empty">Type to search.</p>`; return; }
+    const hits = db.jobs.filter(j => {
+      const m = db.machines[j.machineId] || {};
+      return [jobNo(j), j.company, m.name, m.model, m.serial].join(" ").toLowerCase().includes(q);
+    }).sort((a, b) => b.n - a.n);
+    listEl.innerHTML = hits.length ? hits.map(jobRowHtml).join("") : `<p class="empty">Nothing matches.</p>`;
+    wireJobRows(listEl);
+  };
+  document.getElementById("q").oninput = draw; draw();
 }
 
 // ------------------------------------------------------------------ HUB
@@ -142,12 +173,29 @@ function hubCard(label, icon, cls, onclick) {
 }
 function renderHub(id) {
   const m = db.machines[id];
-  app.innerHTML = `<h2 class="hubtitle">${m ? esc(m.name) + (m.model ? " " + esc(m.model) : "") : "New machine"}</h2><div class="hub"></div>`;
+  if (!m) return renderNotRegistered(id);
+  app.innerHTML = `<h2 class="hubtitle">${esc(m.name)}${m.model ? " " + esc(m.model) : ""}</h2><div class="hub"></div>`;
   const hub = app.querySelector(".hub");
   hub.appendChild(hubCard("Service history", ICONS.history, "", () => renderHistory(id)));
   hub.appendChild(hubCard("Cleaning instructions", ICONS.drop, "alt", () => renderCleaning(id)));
   hub.appendChild(hubCard("Book this machine", ICONS.calendar, "", () => renderBooking(id)));
-  hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => isStaff() ? renderStaffArea(id) : renderStaffLogin(id)));
+  hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => isStaff() ? renderStaffMenu() : renderStaffLogin(id)));
+}
+// A tag that's never been received before. The code only lives in the link itself
+// (see CLAUDE.md Section 4) - nothing is stored until a staff member registers it.
+function renderNotRegistered(id) {
+  app.innerHTML = `
+    <section class="panel">
+      <h2>This machine is not registered yet</h2>
+      <p class="muted">This tag hasn't been set up in our system before.</p>
+    </section>
+    <div class="hub"></div>`;
+  const hub = app.querySelector(".hub");
+  if (isStaff()) {
+    hub.appendChild(hubCard("Register this machine", ICONS.tag, "staff", () => renderIntake(id, null)));
+  } else {
+    hub.appendChild(hubCard("Technician login", ICONS.lock, "staff", () => renderStaffLogin(id)));
+  }
 }
 function backLink(id) {
   const a = document.createElement("a");
@@ -246,32 +294,40 @@ function renderStaffLogin(id) {
     if (f.pin.trim() !== STAFF_PIN) { err.textContent = "Wrong PIN."; return; }
     localStorage.setItem(STAFF_KEY, "1");
     localStorage.setItem(STAFF_NAME_KEY, f.who.trim());
-    id ? renderStaffArea(id) : renderStaffHome();
+    renderStaffMenu();
   };
 }
 
 // ------------------------------------------------------------- MACHINE
-function staffBarHtml(id) {
-  return `<div class="staffbar"><a href="#" class="backlink" id="hubback">← Back to jobs list</a><a href="#" class="logoutlink" id="stafflogout">Log out of technician mode</a></div>`;
+function staffBarHtml() {
+  return `<div class="staffbar"><a href="#" class="backlink" id="hubback">← Back to staff menu</a><a href="#" class="logoutlink" id="stafflogout">Log out of technician mode</a></div>`;
 }
-function wireStaffBar(id) {
-  // Always back to the technician home (received machines + receive new) -
-  // this bar only ever shows to someone already logged in as staff.
-  const b = document.getElementById("hubback"); if (b) b.onclick = e => { e.preventDefault(); history.pushState(null, "", location.pathname); renderStaffHome(); };
-  const o = document.getElementById("stafflogout"); if (o) o.onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); renderHub(id); };
+function wireStaffBar() {
+  // Always back to the staff menu - this bar only ever shows to someone already
+  // logged in as staff, and the menu always refers to the tag they started on.
+  const b = document.getElementById("hubback"); if (b) b.onclick = e => { e.preventDefault(); history.pushState(null, "", currentTag ? "?m=" + currentTag : location.pathname); renderStaffMenu(); };
+  const o = document.getElementById("stafflogout"); if (o) o.onclick = e => { e.preventDefault(); localStorage.removeItem(STAFF_KEY); history.pushState(null, "", currentTag ? "?m=" + currentTag : location.pathname); currentTag ? renderHub(currentTag) : renderStaffLogin(null); };
 }
 function renderStaffArea(id) {
   const m = db.machines[id];
   if (!m) return renderIntake(id, null);
   const open = openJob(id);
-  let html = staffBarHtml(id) + `
+  const latest = open || jobsOf(id)[0];
+  const metaParts = [];
+  if (latest) {
+    metaParts.push(esc(latest.company) + (latest.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""));
+    if (contactLine(latest)) metaParts.push(esc(contactLine(latest)));
+  }
+  if (m.serial) metaParts.push("Serial " + esc(m.serial));
+  if (latest && latest.machineHours) metaParts.push(esc(latest.machineHours) + " hrs");
+  let html = staffBarHtml() + `
     <section class="panel">
       <h2>${esc(m.name)} ${esc(m.model)}</h2>
-      <p class="muted">${esc(m.company)}${m.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""}${contactLine(m) ? " &bull; " + esc(contactLine(m)) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}${m.machineHours ? " &bull; " + esc(m.machineHours) + " hrs" : ""}</p>
+      <p class="muted">${metaParts.join(" &bull; ")}</p>
       <div class="taglink">Tag link: ${esc(link(id))}</div>
     </section>`;
   app.innerHTML = html;
-  wireStaffBar(id);
+  wireStaffBar();
   if (open) {
     const box = document.createElement("div"); app.appendChild(box);
     open.status === "ready" ? renderAccounts(box, open, m) : renderTech(box, open, m);
@@ -284,30 +340,34 @@ function renderStaffArea(id) {
   const hist = jobsOf(id).filter(j => !open || j.n !== open.n);
   if (hist.length) {
     const h = document.createElement("section"); h.className = "panel";
-    h.innerHTML = `<h2>Repair history</h2>` + hist.map(j => `<div class="jobrow"><span><b>${jobNo(j)}</b><small>${esc(j.date)} &bull; ${esc(j.fault)}</small></span><span><span class="pill ${j.status}">${STATUS[j.status]}</span> <a class="btn2" href="#" data-n="${j.n}">View</a></span></div>`).join("");
+    h.innerHTML = `<h2>Repair history</h2>` + hist.map(j => `<div class="jobrow"><span><b>${jobNo(j)}</b><small>${esc(j.date)} &bull; ${esc(j.company)} &bull; ${esc(j.fault)}</small></span><span><span class="pill ${j.status}">${STATUS[j.status]}</span> <a class="btn2" href="#" data-n="${j.n}">View</a></span></div>`).join("");
     app.appendChild(h);
     h.querySelectorAll("a[data-n]").forEach(a => a.onclick = e => { e.preventDefault(); const j = db.jobs.find(x => x.n == a.dataset.n); const box = document.createElement("div"); h.replaceWith(box); renderAccounts(box, j, m, true); });
   }
 }
 
 // -------------------------------------------------------------- INTAKE
+// m (the machine's permanent identity - name/model/serial) is remembered on the
+// tag itself from here on; only the customer, fault, hours and received-by are
+// new every visit. lastJob suggests the last customer, which staff can change.
 function renderIntake(id, m) {
   m = m || {};
-  app.innerHTML = staffBarHtml(id) + `
+  const lastJob = jobsOf(id)[0] || {};
+  app.innerHTML = staffBarHtml() + `
     <section class="panel">
       <h2>Receive machine</h2>
-      <p class="muted">Step 1 &ndash; fill this in when the machine arrives.</p>
+      <p class="muted">${m.name ? "Confirm the details below and add what's new." : "Step 1 &ndash; fill this in when the machine arrives."}</p>
       <form id="f" novalidate>
         <div class="grid2">
-          <label>Company<input name="company" id="company" value="${esc(m.company)}" autocomplete="off"><div class="sugg" id="companysugg" hidden></div></label>
-          <label>First name<input name="contactFirst" value="${esc(m.contactFirst)}" autocomplete="off"></label>
-          <label>Surname<input name="contactSurname" value="${esc(m.contactSurname)}" autocomplete="off"></label>
-          <label>Mobile number<input name="contactPhone" type="tel" value="${esc(m.contactPhone)}" autocomplete="off"></label>
-          <label>Contact email<input name="contactEmail" type="email" value="${esc(m.contactEmail)}" autocomplete="off"></label>
+          <label>Company<input name="company" id="company" value="${esc(lastJob.company)}" autocomplete="off"><div class="sugg" id="companysugg" hidden></div></label>
+          <label>First name<input name="contactFirst" value="${esc(lastJob.contactFirst)}" autocomplete="off"></label>
+          <label>Surname<input name="contactSurname" value="${esc(lastJob.contactSurname)}" autocomplete="off"></label>
+          <label>Mobile number<input name="contactPhone" type="tel" value="${esc(lastJob.contactPhone)}" autocomplete="off"></label>
+          <label>Contact email<input name="contactEmail" type="email" value="${esc(lastJob.contactEmail)}" autocomplete="off"></label>
           <label>Machine name / ID<input name="name" value="${esc(m.name)}" autocomplete="off"></label>
           <label>Model<input name="model" value="${esc(m.model)}" autocomplete="off"></label>
           <label>Serial number<input name="serial" value="${esc(m.serial)}" autocomplete="off"></label>
-          <label>Machine hours<input name="machineHours" type="number" inputmode="decimal" min="0" step="0.1" value="${esc(m.machineHours)}"></label>
+          <label>Machine hours<input name="machineHours" type="number" inputmode="decimal" min="0" step="0.1"></label>
           <label>Received by<input name="by" value="${esc(staffName())}" autocomplete="off"></label>
         </div>
         <label>Fault reported by customer<textarea name="fault" rows="4"></textarea></label>
@@ -315,16 +375,16 @@ function renderIntake(id, m) {
         <button class="btn" type="submit">Save &amp; receive machine</button>
       </form>
     </section>`;
-  wireStaffBar(id);
+  wireStaffBar();
   wireCompanyAutocomplete(document.getElementById("company"), document.getElementById("companysugg"));
   document.getElementById("f").onsubmit = e => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target).entries());
     const miss = [["company", "company"], ["name", "machine name"], ["fault", "fault reported"]].find(([k]) => !f[k].trim());
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
-    db.machines[id] = { company: f.company.trim(), inXero: isKnownCompany(f.company), contactFirst: f.contactFirst.trim(), contactSurname: f.contactSurname.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim(), machineHours: f.machineHours.trim() };
-    db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
-    save(); renderStaffHome();
+    db.machines[id] = { name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim(), cleaningSteps: m.cleaningSteps, cleaningVideoUrl: m.cleaningVideoUrl };
+    db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", company: f.company.trim(), inXero: isKnownCompany(f.company), contactFirst: f.contactFirst.trim(), contactSurname: f.contactSurname.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), machineHours: f.machineHours.trim(), receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
+    save(); renderStaffArea(id);
   };
 }
 // Every company name we've seen before (the 8 sample ones plus any typed in
@@ -333,7 +393,7 @@ function renderIntake(id, m) {
 function knownCompanyNames() {
   const byLower = new Map();
   SAMPLE_COMPANIES.forEach(c => byLower.set(c.toLowerCase(), c));
-  Object.values(db.machines).forEach(mm => { if (mm.company && mm.company.trim() && !byLower.has(mm.company.trim().toLowerCase())) byLower.set(mm.company.trim().toLowerCase(), mm.company.trim()); });
+  db.jobs.forEach(j => { if (j.company && j.company.trim() && !byLower.has(j.company.trim().toLowerCase())) byLower.set(j.company.trim().toLowerCase(), j.company.trim()); });
   return [...byLower.values()];
 }
 // Finds that company's most recently used contact details, if we have any.
@@ -348,9 +408,8 @@ function lookupContact(companyName) {
   if (!q) return null;
   const byJobDesc = db.jobs.slice().sort((a, b) => b.n - a.n);
   for (const j of byJobDesc) {
-    const mm = db.machines[j.machineId];
-    if (mm && mm.company && mm.company.trim().toLowerCase() === q && (mm.contactFirst || mm.contactSurname || mm.contactPhone || mm.contactEmail)) {
-      return { contactFirst: mm.contactFirst || "", contactSurname: mm.contactSurname || "", contactPhone: mm.contactPhone || "", contactEmail: mm.contactEmail || "" };
+    if (j.company && j.company.trim().toLowerCase() === q && (j.contactFirst || j.contactSurname || j.contactPhone || j.contactEmail)) {
+      return { contactFirst: j.contactFirst || "", contactSurname: j.contactSurname || "", contactPhone: j.contactPhone || "", contactEmail: j.contactEmail || "" };
     }
   }
   return SAMPLE_CONTACTS[q] || null;
@@ -603,22 +662,22 @@ function rowsFor(job, m) {
   const rows = [];
   job.items.forEach((it, i) => {
     const parts = it.parts.filter(p => p.desc || p.pn || p.qty);
-    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.inXero === false ? "No" : "Yes", m.contactFirst, m.contactSurname, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, m.machineHours, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.source, p.qty, p.rrp == null ? "" : p.rrp]));
+    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, job.company, job.inXero === false ? "No" : "Yes", job.contactFirst, job.contactSurname, job.contactPhone, job.contactEmail, m.name, m.model, m.serial, job.machineHours, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.source, p.qty, p.rrp == null ? "" : p.rrp]));
   });
   return rows;
 }
 const csvFor = (job, m) => toCsv([CSV_HEAD].concat(rowsFor(job, m)));
 function renderAccounts(box, job, m, readonly) {
   const totalHours = job.items.reduce((s, it) => s + (parseFloat(it.hours) || 0), 0);
-  const subject = "Job ready to quote: " + jobNo(job) + " - " + m.company + " - " + m.name;
+  const subject = "Job ready to quote: " + jobNo(job) + " - " + job.company + " - " + m.name;
   const body = "Job " + jobNo(job) + " is ready to quote.\n\nOpen the job: " + link(job.machineId);
   box.innerHTML = `
     <section class="panel">
       <h2>${jobNo(job)} <span class="pill ${job.status}">${STATUS[job.status]}</span></h2>
       <p class="muted">Step 3 &ndash; accounts. Everything for quoting is below.</p>
       <table class="sum">
-        <tr><th>Company</th><td>${esc(m.company)}${m.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""}</td></tr>
-        <tr><th>Contact</th><td>${esc(contactLine(m))}</td></tr>
+        <tr><th>Company</th><td>${esc(job.company)}${job.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""}</td></tr>
+        <tr><th>Contact</th><td>${esc(contactLine(job))}</td></tr>
         <tr><th>Machine</th><td>${esc(m.name)} ${esc(m.model)}${m.serial ? " (serial " + esc(m.serial) + ")" : ""}</td></tr>
         <tr><th>Received</th><td>${esc(job.date)}</td></tr>
         <tr><th>Tech</th><td>${esc(job.tech)}</td></tr>
