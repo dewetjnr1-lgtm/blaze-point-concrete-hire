@@ -325,20 +325,52 @@ function renderIntake(id, m) {
     save(); renderStaffHome();
   };
 }
+// Every company name we've seen before (the 8 sample ones plus any typed in
+// for a real job), so the dropdown and the contact-details prefill both work
+// for companies that aren't in the sample Xero list yet.
+function knownCompanyNames() {
+  const byLower = new Map();
+  SAMPLE_COMPANIES.forEach(c => byLower.set(c.toLowerCase(), c));
+  Object.values(db.machines).forEach(mm => { if (mm.company && mm.company.trim() && !byLower.has(mm.company.trim().toLowerCase())) byLower.set(mm.company.trim().toLowerCase(), mm.company.trim()); });
+  return [...byLower.values()];
+}
+// Finds that company's most recently used contact details, if we have any.
+function lookupContact(companyName) {
+  const q = companyName.trim().toLowerCase();
+  if (!q) return null;
+  const byJobDesc = db.jobs.slice().sort((a, b) => b.n - a.n);
+  for (const j of byJobDesc) {
+    const mm = db.machines[j.machineId];
+    if (mm && mm.company && mm.company.trim().toLowerCase() === q && (mm.contactFirst || mm.contactSurname || mm.contactPhone || mm.contactEmail)) {
+      return { contactFirst: mm.contactFirst || "", contactSurname: mm.contactSurname || "", contactPhone: mm.contactPhone || "", contactEmail: mm.contactEmail || "" };
+    }
+  }
+  return null;
+}
 // Own dropdown rather than the browser's native <datalist> suggestions,
 // which don't show up reliably on phones (notably iPhone Safari).
 function wireCompanyAutocomplete(input, list) {
+  const form = input.closest("form");
+  const prefillContact = name => {
+    const c = lookupContact(name);
+    if (!c) return;
+    ["contactFirst", "contactSurname", "contactPhone", "contactEmail"].forEach(field => {
+      const el = form.elements[field];
+      if (el && !el.value.trim() && c[field]) el.value = c[field];
+    });
+  };
   const hide = () => { list.hidden = true; };
   const show = () => {
     const q = input.value.trim().toLowerCase();
-    const hits = SAMPLE_COMPANIES.filter(c => c.toLowerCase().includes(q));
+    const hits = knownCompanyNames().filter(c => c.toLowerCase().includes(q));
     if (!hits.length) return hide();
     list.innerHTML = hits.map((c, n) => `<button type="button" data-n="${n}">${esc(c)}</button>`).join("");
     list.hidden = false;
-    list.querySelectorAll("button").forEach(btn => btn.onclick = () => { input.value = hits[+btn.dataset.n]; hide(); });
+    list.querySelectorAll("button").forEach(btn => btn.onclick = () => { input.value = hits[+btn.dataset.n]; hide(); prefillContact(input.value); });
   };
   input.addEventListener("focus", show);
   input.addEventListener("input", show);
+  input.addEventListener("blur", () => prefillContact(input.value));
   document.addEventListener("click", e => { if (e.target !== input && !list.contains(e.target)) hide(); });
 }
 
