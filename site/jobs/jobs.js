@@ -315,9 +315,21 @@ function renderStaffArea(id) {
       <h2>${esc(m.name)} ${esc(m.model)}</h2>
       <p class="muted">${metaParts.join(" &bull; ")}</p>
       <div class="taglink">Tag link: ${esc(link(id))}</div>
+      <a href="#" id="delmachine" class="dellink">Delete this machine</a>
     </section>`;
   app.innerHTML = html;
   wireStaffBar();
+  // No longer repairable, or registered by mistake - this frees the tag's code
+  // so it can be written onto a different machine. Removes the machine and
+  // every job ever logged against it, so it asks twice before doing it.
+  document.getElementById("delmachine").onclick = e => {
+    e.preventDefault();
+    if (!confirm(`Delete "${m.name}${m.model ? " " + m.model : ""}" and all ${jobsOf(id).length} job(s) against it? This can't be undone.`)) return;
+    delete db.machines[id];
+    db.jobs = db.jobs.filter(j => j.machineId !== id);
+    save();
+    renderStaffMenu();
+  };
   if (open) {
     const box = document.createElement("div"); app.appendChild(box);
     open.status === "ready" ? renderAccounts(box, open, m) : renderTech(box, open, m);

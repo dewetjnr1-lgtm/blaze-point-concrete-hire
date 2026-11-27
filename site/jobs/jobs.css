@@ -29,6 +29,7 @@ table.sum th{width:38%;color:var(--ink2);font-weight:650}
 .jobrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line);color:inherit;text-decoration:none}
 .jobrow:first-of-type{border-top:0}.jobrow b{display:block}.jobrow small{color:var(--ink2)}
 .taglink{word-break:break-all;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:.82rem}
+.dellink{display:inline-block;margin-top:10px;color:#a33;font-weight:650;font-size:.85rem;text-decoration:none;min-height:44px;line-height:44px}
 .empty{color:var(--ink2);text-align:center;padding:12px 0}
 .ok{color:var(--acc);font-weight:650}
 .steps{display:flex;gap:6px;margin:10px 0 2px;flex-wrap:wrap}

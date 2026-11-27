@@ -79,6 +79,7 @@ _Add one line per settled decision, newest last._
 15. 27 Nov 2026: reversed part of decision 14 - the 4-option page always shows first for every tag, registered or not (Chris: this must never be skipped). An unregistered tag shows "New machine" as the title instead of a separate "not registered yet" screen. Added a small reference code badge in the corner of that page (the tag's own code, e.g. CH-DEMO1) so staff can identify a tag even before it's registered.
 16. 27 Nov 2026: the current company also shows on that page - but only once logged in as staff, under the machine name. Not shown to the public, since which customer currently has a machine is customer information (privacy rule in Section 5), and the public page is reachable by anyone who taps the tag.
 17. 27 Nov 2026: removed the bulk "Download all history (.csv)" link from the staff menu - Chris doesn't want it. A single job's own CSV (on its "ready to quote" page) is unaffected.
+18. 27 Nov 2026: added "Delete this machine" on a machine's own staff page, available as soon as it's registered (e.g. when it's beyond repair). Asks for confirmation, then removes the machine and every job logged against it, freeing the tag's code to be registered to a different machine later.
 
 ### Changes Chris and Brad want
 _Chris will give these a few at a time. Keep this list up to date and tick them off when done._
