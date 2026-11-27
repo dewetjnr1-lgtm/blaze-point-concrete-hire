@@ -335,6 +335,12 @@ function knownCompanyNames() {
   return [...byLower.values()];
 }
 // Finds that company's most recently used contact details, if we have any.
+// DEMO ONLY: a made-up contact for one sample company, so the auto-fill has
+// something to show before any real jobs exist. Later this comes from Xero's
+// own contact details instead, same as the company list itself.
+const SAMPLE_CONTACTS = {
+  "westside demolition": { contactFirst: "Dave", contactSurname: "Thompson", contactPhone: "0422 334 455", contactEmail: "dave@westsidedemolition.com.au" }
+};
 function lookupContact(companyName) {
   const q = companyName.trim().toLowerCase();
   if (!q) return null;
@@ -345,7 +351,7 @@ function lookupContact(companyName) {
       return { contactFirst: mm.contactFirst || "", contactSurname: mm.contactSurname || "", contactPhone: mm.contactPhone || "", contactEmail: mm.contactEmail || "" };
     }
   }
-  return null;
+  return SAMPLE_CONTACTS[q] || null;
 }
 // Own dropdown rather than the browser's native <datalist> suggestions,
 // which don't show up reliably on phones (notably iPhone Safari).
@@ -362,7 +368,10 @@ function wireCompanyAutocomplete(input, list) {
   const hide = () => { list.hidden = true; };
   const show = () => {
     const q = input.value.trim().toLowerCase();
-    const hits = knownCompanyNames().filter(c => c.toLowerCase().includes(q));
+    const names = knownCompanyNames();
+    const exact = names.find(c => c.toLowerCase() === q);
+    if (exact) prefillContact(exact);  // fills in as soon as it matches, no need to tap away first
+    const hits = names.filter(c => c.toLowerCase().includes(q));
     if (!hits.length) return hide();
     list.innerHTML = hits.map((c, n) => `<button type="button" data-n="${n}">${esc(c)}</button>`).join("");
     list.hidden = false;
