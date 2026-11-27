@@ -7,9 +7,14 @@
 // =====================================================================
 const ACCOUNTS_EMAIL = "accounts@example.com";   // change to the accounts person's email
 const BOOKING_EMAIL = "accounts@example.com";    // change to the address booking requests go to
-const PORTAL_URL = "https://www.husqvarnacp.com/"; // CHANGE: the Husqvarna dealer portal address Brad uses (not verified)
+const PORTAL_URL = "https://portal.husqvarnagroup.com/au/"; // Husqvarna dealer portal - opens in a new tab only, no login handled by this app
 const KEY = "ch_jobcards_v1";
 // DEMO ONLY: a single shared PIN for all staff. Real logins (one per person) come later (Prompt 4).
+// DEMO ONLY: sample company list for the Company field. Later this gets replaced
+// with a read-only copy of Brad's real Xero contacts (see Phase 2 in CLAUDE.md) -
+// swap this array for that list and the rest of the Company field needs no change.
+const SAMPLE_COMPANIES = ["Ironbark Earthworks", "Westside Demolition", "Coastal Concrete Co", "Hartley Civil Contracting", "Bayview Builders", "Redline Paving", "Summit Structural", "Narrows Infrastructure"];
+const isKnownCompany = name => SAMPLE_COMPANIES.some(c => c.toLowerCase() === name.trim().toLowerCase());
 const STAFF_PIN = "1234";
 const STAFF_KEY = "ch_staff_v1";
 const STAFF_NAME_KEY = "ch_staff_name_v1";
@@ -70,8 +75,8 @@ function staffHomeBarHtml() {
 function renderStaffHome() {
   app.innerHTML = staffHomeBarHtml() + `
     <section class="panel">
-      <h2>All jobs &amp; history</h2>
-      <p class="muted">Search by company, machine, model, serial or job number.</p>
+      <h2>Received machines</h2>
+      <p class="muted">Search by company, machine, model, serial or job number. Tap any job to open it.</p>
       <input id="q" type="search" placeholder="Search…" autocomplete="off">
       <div id="list"></div>
     </section>
@@ -93,8 +98,9 @@ function renderStaffHome() {
       return !q || [jobNo(j), m.company, m.name, m.model, m.serial].join(" ").toLowerCase().includes(q);
     });
     document.getElementById("list").innerHTML = list.length ? list.map(j => { const m = db.machines[j.machineId] || {}; return `
-      <a class="jobrow" href="?m=${esc(j.machineId)}"><span><b>${jobNo(j)} &ndash; ${esc(m.company)}</b><small>${esc(m.name)} ${esc(m.model)} &bull; ${esc(j.date)}</small></span><span class="pill ${j.status}">${STATUS[j.status]}</span></a>`; }).join("")
+      <a class="jobrow" href="?m=${esc(j.machineId)}" data-m="${esc(j.machineId)}"><span><b>${jobNo(j)} &ndash; ${esc(m.company)}</b>${m.inXero === false ? ' <span class="pill received">Not in Xero</span>' : ""}<small>${esc(m.name)} ${esc(m.model)} &bull; ${esc(j.date)}</small></span><span class="pill ${j.status}">${STATUS[j.status]}</span></a>`; }).join("")
       : `<p class="empty">${q ? "Nothing matches." : "No jobs yet."}</p>`;
+    document.querySelectorAll("a[data-m]").forEach(a => a.onclick = e => { e.preventDefault(); history.pushState(null, "", "?m=" + a.dataset.m); renderStaffArea(a.dataset.m); });
   };
   document.getElementById("q").oninput = draw; draw();
   document.getElementById("newtag").onclick = () => { location.href = "?m=" + newId(); };
@@ -240,7 +246,7 @@ function renderStaffArea(id) {
   let html = staffBarHtml(id) + `
     <section class="panel">
       <h2>${esc(m.name)} ${esc(m.model)}</h2>
-      <p class="muted">${esc(m.company)}${contactLine(m) ? " &bull; " + esc(contactLine(m)) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}</p>
+      <p class="muted">${esc(m.company)}${m.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""}${contactLine(m) ? " &bull; " + esc(contactLine(m)) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}${m.machineHours ? " &bull; " + esc(m.machineHours) + " hrs" : ""}</p>
       <div class="taglink">Tag link: ${esc(link(id))}</div>
     </section>`;
   app.innerHTML = html;
@@ -272,13 +278,14 @@ function renderIntake(id, m) {
       <p class="muted">Step 1 &ndash; fill this in when the machine arrives.</p>
       <form id="f" novalidate>
         <div class="grid2">
-          <label>Company<input name="company" value="${esc(m.company)}" autocomplete="off"></label>
+          <label>Company<input name="company" value="${esc(m.company)}" list="companylist" autocomplete="off"><datalist id="companylist">${SAMPLE_COMPANIES.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label>
           <label>Contact name<input name="contactName" value="${esc(m.contactName)}" autocomplete="off"></label>
-          <label>Contact phone<input name="contactPhone" type="tel" value="${esc(m.contactPhone)}" autocomplete="off"></label>
+          <label>Mobile number<input name="contactPhone" type="tel" value="${esc(m.contactPhone)}" autocomplete="off"></label>
           <label>Contact email<input name="contactEmail" type="email" value="${esc(m.contactEmail)}" autocomplete="off"></label>
           <label>Machine name / ID<input name="name" value="${esc(m.name)}" autocomplete="off"></label>
           <label>Model<input name="model" value="${esc(m.model)}" autocomplete="off"></label>
           <label>Serial number<input name="serial" value="${esc(m.serial)}" autocomplete="off"></label>
+          <label>Machine hours<input name="machineHours" type="number" inputmode="decimal" min="0" step="0.1" value="${esc(m.machineHours)}"></label>
           <label>Received by<input name="by" value="${esc(staffName())}" autocomplete="off"></label>
         </div>
         <label>Fault reported by customer<textarea name="fault" rows="4"></textarea></label>
@@ -292,7 +299,7 @@ function renderIntake(id, m) {
     const f = Object.fromEntries(new FormData(e.target).entries());
     const miss = [["company", "company"], ["name", "machine name"], ["fault", "fault reported"]].find(([k]) => !f[k].trim());
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
-    db.machines[id] = { company: f.company.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim() };
+    db.machines[id] = { company: f.company.trim(), inXero: isKnownCompany(f.company), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim(), machineHours: f.machineHours.trim() };
     db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
     save(); renderStaffHome();
   };
@@ -482,7 +489,7 @@ function openBrowser(pick) {
 }
 
 // ------------------------------------------------------------ ACCOUNTS
-const CSV_HEAD = ["Job No", "Date", "Company", "Contact name", "Contact phone", "Contact email", "Machine", "Model", "Serial", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Qty", "RRP each"];
+const CSV_HEAD = ["Job No", "Date", "Company", "In Xero", "Contact name", "Contact phone", "Contact email", "Machine", "Model", "Serial", "Machine hours", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Qty", "RRP each"];
 const toCsv = rows => "\ufeff" + rows.map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
 function download(name, text) {
   const a = document.createElement("a");
@@ -493,7 +500,7 @@ function rowsFor(job, m) {
   const rows = [];
   job.items.forEach((it, i) => {
     const parts = it.parts.filter(p => p.desc || p.pn || p.qty);
-    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.contactName, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.qty, p.rrp == null ? "" : p.rrp]));
+    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.inXero === false ? "No" : "Yes", m.contactName, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, m.machineHours, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.qty, p.rrp == null ? "" : p.rrp]));
   });
   return rows;
 }
@@ -507,7 +514,7 @@ function renderAccounts(box, job, m, readonly) {
       <h2>${jobNo(job)} <span class="pill ${job.status}">${STATUS[job.status]}</span></h2>
       <p class="muted">Step 3 &ndash; accounts. Everything for quoting is below.</p>
       <table class="sum">
-        <tr><th>Company</th><td>${esc(m.company)}</td></tr>
+        <tr><th>Company</th><td>${esc(m.company)}${m.inXero === false ? ' <span class="pill received">Not in Xero yet</span>' : ""}</td></tr>
         <tr><th>Contact</th><td>${esc(contactLine(m))}</td></tr>
         <tr><th>Machine</th><td>${esc(m.name)} ${esc(m.model)}${m.serial ? " (serial " + esc(m.serial) + ")" : ""}</td></tr>
         <tr><th>Received</th><td>${esc(job.date)}</td></tr>
