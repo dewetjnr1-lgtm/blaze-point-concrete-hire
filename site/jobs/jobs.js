@@ -59,6 +59,7 @@ const jobsOf = id => db.jobs.filter(j => j.machineId === id).sort((a, b) => b.n 
 const openJob = id => jobsOf(id).find(j => j.status !== "quoted");
 const money = n => "$" + Number(n).toFixed(2);
 const jobNo = j => "JC-" + String(j.n).padStart(4, "0");
+const contactLine = m => [m.contactName, m.contactPhone, m.contactEmail].filter(Boolean).join(" • ");
 
 // ------------------------------------------------------- TECHNICIAN HOME
 // Shown after staff login with no tag (e.g. opening the app from the home screen icon).
@@ -239,7 +240,7 @@ function renderStaffArea(id) {
   let html = staffBarHtml(id) + `
     <section class="panel">
       <h2>${esc(m.name)} ${esc(m.model)}</h2>
-      <p class="muted">${esc(m.company)}${m.contact ? " &bull; " + esc(m.contact) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}</p>
+      <p class="muted">${esc(m.company)}${contactLine(m) ? " &bull; " + esc(contactLine(m)) : ""}${m.serial ? " &bull; Serial " + esc(m.serial) : ""}</p>
       <div class="taglink">Tag link: ${esc(link(id))}</div>
     </section>`;
   app.innerHTML = html;
@@ -272,7 +273,9 @@ function renderIntake(id, m) {
       <form id="f" novalidate>
         <div class="grid2">
           <label>Company<input name="company" value="${esc(m.company)}" autocomplete="off"></label>
-          <label>Contact name &amp; phone<input name="contact" value="${esc(m.contact)}" autocomplete="off"></label>
+          <label>Contact name<input name="contactName" value="${esc(m.contactName)}" autocomplete="off"></label>
+          <label>Contact phone<input name="contactPhone" type="tel" value="${esc(m.contactPhone)}" autocomplete="off"></label>
+          <label>Contact email<input name="contactEmail" type="email" value="${esc(m.contactEmail)}" autocomplete="off"></label>
           <label>Machine name / ID<input name="name" value="${esc(m.name)}" autocomplete="off"></label>
           <label>Model<input name="model" value="${esc(m.model)}" autocomplete="off"></label>
           <label>Serial number<input name="serial" value="${esc(m.serial)}" autocomplete="off"></label>
@@ -289,9 +292,9 @@ function renderIntake(id, m) {
     const f = Object.fromEntries(new FormData(e.target).entries());
     const miss = [["company", "company"], ["name", "machine name"], ["fault", "fault reported"]].find(([k]) => !f[k].trim());
     if (miss) { document.getElementById("err").textContent = "Please enter the " + miss[1] + "."; return; }
-    db.machines[id] = { company: f.company.trim(), contact: f.contact.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim() };
+    db.machines[id] = { company: f.company.trim(), contactName: f.contactName.trim(), contactPhone: f.contactPhone.trim(), contactEmail: f.contactEmail.trim(), name: f.name.trim(), model: f.model.trim(), serial: f.serial.trim() };
     db.jobs.push({ n: db.next++, machineId: id, date: today(), status: "received", receivedBy: f.by.trim(), fault: f.fault.trim(), tech: staffName(), items: [{ fault: "", work: "", hours: "", parts: [{ desc: "", pn: "", qty: "" }] }] });
-    save(); renderStaffArea(id);
+    save(); renderStaffHome();
   };
 }
 
@@ -479,7 +482,7 @@ function openBrowser(pick) {
 }
 
 // ------------------------------------------------------------ ACCOUNTS
-const CSV_HEAD = ["Job No", "Date", "Company", "Contact", "Machine", "Model", "Serial", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Qty", "RRP each"];
+const CSV_HEAD = ["Job No", "Date", "Company", "Contact name", "Contact phone", "Contact email", "Machine", "Model", "Serial", "Tech", "Work item", "Fault found", "Work completed", "Hours", "Part description", "Part number", "Qty", "RRP each"];
 const toCsv = rows => "\ufeff" + rows.map(r => r.map(v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
 function download(name, text) {
   const a = document.createElement("a");
@@ -490,7 +493,7 @@ function rowsFor(job, m) {
   const rows = [];
   job.items.forEach((it, i) => {
     const parts = it.parts.filter(p => p.desc || p.pn || p.qty);
-    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.contact, m.name, m.model, m.serial, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.qty, p.rrp == null ? "" : p.rrp]));
+    (parts.length ? parts : [{ desc: "", pn: "", qty: "" }]).forEach(p => rows.push([jobNo(job), job.date, m.company, m.contactName, m.contactPhone, m.contactEmail, m.name, m.model, m.serial, job.tech, i + 1, it.fault, it.work, it.hours, p.desc, p.pn, p.qty, p.rrp == null ? "" : p.rrp]));
   });
   return rows;
 }
@@ -505,7 +508,7 @@ function renderAccounts(box, job, m, readonly) {
       <p class="muted">Step 3 &ndash; accounts. Everything for quoting is below.</p>
       <table class="sum">
         <tr><th>Company</th><td>${esc(m.company)}</td></tr>
-        <tr><th>Contact</th><td>${esc(m.contact)}</td></tr>
+        <tr><th>Contact</th><td>${esc(contactLine(m))}</td></tr>
         <tr><th>Machine</th><td>${esc(m.name)} ${esc(m.model)}${m.serial ? " (serial " + esc(m.serial) + ")" : ""}</td></tr>
         <tr><th>Received</th><td>${esc(job.date)}</td></tr>
         <tr><th>Tech</th><td>${esc(job.tech)}</td></tr>
